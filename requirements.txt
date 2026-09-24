@@ -1,0 +1,9 @@
+numpy
+pandas
+scipy
+matplotlib
+scikit-learn
+wfdb
+PyWavelets
+jupyter
+seaborn
