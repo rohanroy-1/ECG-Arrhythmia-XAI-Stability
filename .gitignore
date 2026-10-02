@@ -1,3 +1,6 @@
+# Data
+data/mit-bih-arrhythmia-database-1.0.0/
+
 # Dataset
 data/raw/*
 data/processed/*
