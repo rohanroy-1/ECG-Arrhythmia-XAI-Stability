@@ -1,7 +1,7 @@
 import wfdb
 import matplotlib.pyplot as plt
 
-data_path = r"C:\Users\hp\Downloads\mit-bih-arrhythmia-database-1.0.0\mit-bih-arrhythmia-database-1.0.0\100"
+data_path = "data/mit-bih-arrhythmia-database-1.0.0/100"
 record = wfdb.rdrecord(data_path)
 annotation = wfdb.rdann(data_path, "atr")
 

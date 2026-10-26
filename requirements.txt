@@ -7,3 +7,5 @@ wfdb
 PyWavelets
 jupyter
 seaborn
+torch
+shap
