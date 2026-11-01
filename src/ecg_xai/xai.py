@@ -23,3 +23,16 @@ def gradcam(model, Xz, classes):
     w = A.grad.mean(-1, keepdim=True)
     cam = F.relu((w * A).sum(1, keepdim=True))
     return F.interpolate(cam, size=BEAT_LEN, mode="linear", align_corners=False).squeeze(1).detach().numpy()
+
+
+def integrated_gradients(model, Xz, classes, steps=32):
+    """|IG| per time-sample, zero baseline (the per-beat mean in z-scored space) -> [n,180]."""
+    model.eval()
+    x = torch.tensor(Xz).unsqueeze(1)
+    tot = torch.zeros_like(x)
+    t = torch.tensor(classes).unsqueeze(1)
+    for a in (torch.arange(steps) + 0.5) / steps:
+        xi = (a * x).requires_grad_(True)
+        model(xi).gather(1, t).sum().backward()
+        tot += xi.grad
+    return (x * tot / steps).abs().squeeze(1).detach().numpy()

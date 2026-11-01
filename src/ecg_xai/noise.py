@@ -30,5 +30,19 @@ def add_noise(X, kind, snr_db, seed=0):
         return X.copy()
     rng = np.random.default_rng(seed)
     p_sig = (X - X.mean(1, keepdims=True)).var(1, keepdims=True)
-    scale = np.sqrt(p_sig / (10 ** (snr_db / 10)))
+    snr = np.asarray(snr_db, float).reshape(-1, 1) if np.ndim(snr_db) else snr_db   # scalar or per-beat
+    scale = np.sqrt(p_sig / (10 ** (snr / 10)))
     return (X + scale * _unit_noise(kind, len(X), rng)).astype(np.float32)
+
+
+def add_noise_mixed(X, rng, p_clean=0.2, snr_range=(0, 24)):
+    """Training-time augmentation: each beat gets a random noise type and SNR (or stays clean with prob p_clean)."""
+    out = X.copy()
+    kinds = rng.integers(0, len(NOISE_TYPES), len(X))
+    snr = rng.uniform(*snr_range, len(X))
+    noisy = rng.random(len(X)) >= p_clean
+    for k, kind in enumerate(NOISE_TYPES):
+        m = noisy & (kinds == k)
+        if m.any():
+            out[m] = add_noise(X[m], kind, snr[m], seed=int(rng.integers(1 << 31)))
+    return out

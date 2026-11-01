@@ -3,12 +3,19 @@ import torch
 import torch.nn as nn
 from sklearn.ensemble import RandomForestClassifier
 
-from .data import BEAT_LEN, CLASSES
+from .data import BEAT_LEN, CLASSES, zscore
+from .noise import add_noise_mixed
 
 
-def train_rf(Xz, y, seed=0, cap_per_class=6000):
+def train_rf(X, y, seed=0, cap_per_class=6000, augment=False):
+    """X in mV. augment=True adds one randomly-noised copy of every training beat."""
     rng = np.random.default_rng(seed)
     idx = np.concatenate([rng.permutation(np.where(y == c)[0])[:cap_per_class] for c in range(len(CLASSES))])
+    Xs, ys = X[idx], y[idx]
+    if augment:
+        Xs, ys = np.concatenate([Xs, add_noise_mixed(Xs, rng, p_clean=0.0)]), np.concatenate([ys, ys])
+    Xz = zscore(Xs); y = ys
+    idx = np.arange(len(y))
     rf = RandomForestClassifier(n_estimators=100, min_samples_leaf=3, max_features="sqrt",
                                 class_weight="balanced", n_jobs=-1, random_state=seed)
     return rf.fit(Xz[idx], y[idx])
@@ -30,19 +37,21 @@ class BeatCNN(nn.Module):
         return self.head(self.features(x).mean(-1))
 
 
-def train_cnn(Xz, y, epochs=12, seed=0, bs=256, lr=2e-3):
-    torch.manual_seed(seed)
+def train_cnn(X, y, epochs=12, seed=0, bs=256, lr=2e-3, augment=False):
+    """X in mV. augment=True re-draws noise (type + SNR 0-24 dB) for every batch of every epoch."""
+    torch.manual_seed(seed); rng = np.random.default_rng(seed)
     m = BeatCNN()
     w = torch.tensor(1.0 / np.sqrt(np.bincount(y, minlength=len(CLASSES)).clip(1)), dtype=torch.float32)
     lossf = nn.CrossEntropyLoss(weight=w / w.mean())
     opt = torch.optim.AdamW(m.parameters(), lr=lr, weight_decay=1e-3)
-    X = torch.tensor(Xz).unsqueeze(1); Y = torch.tensor(y)
+    Xc = zscore(X); Y = torch.tensor(y)
     for ep in range(epochs):
-        m.train(); perm = torch.randperm(len(X)); tot = 0
-        for i in range(0, len(X), bs):
+        m.train(); perm = torch.randperm(len(Y)); tot = 0
+        for i in range(0, len(Y), bs):
             b = perm[i:i + bs]
-            opt.zero_grad(); loss = lossf(m(X[b]), Y[b]); loss.backward(); opt.step(); tot += loss.item() * len(b)
-        print(f"  epoch {ep + 1}/{epochs} loss {tot / len(X):.4f}", flush=True)
+            xb = zscore(add_noise_mixed(X[b.numpy()], rng)) if augment else Xc[b.numpy()]
+            opt.zero_grad(); loss = lossf(m(torch.tensor(xb).unsqueeze(1)), Y[b]); loss.backward(); opt.step(); tot += loss.item() * len(b)
+        print(f"  epoch {ep + 1}/{epochs} loss {tot / len(Y):.4f}", flush=True)
     return m.eval()
 
 
