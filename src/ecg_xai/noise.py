@@ -46,3 +46,18 @@ def add_noise_mixed(X, rng, p_clean=0.2, snr_range=(0, 24)):
         if m.any():
             out[m] = add_noise(X[m], kind, snr[m], seed=int(rng.integers(1 << 31)))
     return out
+
+
+def add_real_noise(X, kind, snr_db, noise_dir="data/nstdb", seed=0):
+    """Real noise from the MIT-BIH Noise Stress Test Database (kind in {'bw','em','ma'}; files bw/em/ma.{hea,dat}).
+    Random 180-sample windows from channel 0 are scaled to the target SNR. Download:
+    https://physionet.org/content/nstdb/1.0.0/  (not reachable from the sandbox used for development)."""
+    import wfdb
+    rec = wfdb.rdrecord(f"{noise_dir}/{kind}")
+    n = rec.p_signal[:, 0].astype(np.float64)
+    rng = np.random.default_rng(seed)
+    starts = rng.integers(0, len(n) - BEAT_LEN, len(X))
+    w = np.stack([n[s:s + BEAT_LEN] for s in starts])
+    w = (w - w.mean(1, keepdims=True)) / (w.std(1, keepdims=True) + 1e-12)
+    p_sig = (X - X.mean(1, keepdims=True)).var(1, keepdims=True)
+    return (X + np.sqrt(p_sig / (10 ** (snr_db / 10))) * w).astype(np.float32)
